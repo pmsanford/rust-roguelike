@@ -29,6 +29,8 @@ const ROOM_MAX_SIZE: i32 = 10;
 const ROOM_MIN_SIZE: i32 = 6;
 const MAX_ROOMS: i32 = 30;
 
+const MAX_ROOM_MONSTERS: i32 = 3;
+
 
 
 type Map = Vec<Vec<Tile>>;
@@ -115,7 +117,7 @@ impl Object {
     }
 }
 
-fn make_map() -> (Map, (i32, i32)) {
+fn make_map(objects: &mut Vec<Object>) -> (Map, (i32, i32)) {
     // fill map with "unblocked" tiles
     let mut map = vec![vec![Tile::wall(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
 
@@ -136,6 +138,7 @@ fn make_map() -> (Map, (i32, i32)) {
 
         if !failed {
             create_room(&new_room, &mut map);
+            place_objects(&new_room, objects);
 
             let (new_x, new_y) = new_room.center();
 
@@ -246,6 +249,23 @@ fn create_v_tunnel(y1: i32, y2: i32, x: i32, map: &mut Map) {
     }
 }
 
+fn place_objects(room: &Rect, objects: &mut Vec<Object>) {
+    let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTERS + 1);
+
+    for _ in 0 .. num_monsters {
+        let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
+        let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
+
+        let mut monster = if rand::random::<f32>() < 0.8 {
+            Object::new(x, y, 'o', colors::DESATURATED_GREEN)
+        } else {
+            Object::new(x, y, 'T', colors::DARKER_GREEN)
+        };
+
+        objects.push(monster);
+    }
+}
+
 fn main() {
     let mut root = Root::initializer()
         .font("arial10x10.png", FontLayout::Tcod)
@@ -263,10 +283,11 @@ fn main() {
 
     // the list of objects with those two
 
+    let mut objects = vec![];
     // generate map (at this point it's not drawn to the screen)
-    let (mut map, (player_x, player_y)) = make_map();
+    let (mut map, (player_x, player_y)) = make_map(&mut objects);
     let player = Object::new(player_x, player_y, '@', colors::WHITE);
-    let mut objects = [player, npc];
+    objects.insert(0 as usize, player);
 
     let mut fov_map = FovMap::new(MAP_WIDTH, MAP_HEIGHT);
 
