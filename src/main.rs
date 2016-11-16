@@ -275,14 +275,6 @@ fn main() {
         .init();
     tcod::system::set_fps(LIMIT_FPS);
     let mut con = Offscreen::new(MAP_WIDTH, MAP_HEIGHT);
-
-    // create object representing the player
-
-    // create an NPC
-    let npc = Object::new(SCREEN_WIDTH / 2 - 5, SCREEN_HEIGHT / 2, '@', colors::YELLOW);
-
-    // the list of objects with those two
-
     let mut objects = vec![];
     // generate map (at this point it's not drawn to the screen)
     let (mut map, (player_x, player_y)) = make_map(&mut objects);
