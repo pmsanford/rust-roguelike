@@ -62,15 +62,16 @@ impl Rect {
 struct Tile {
     blocked: bool,
     block_sight: bool,
+    explored: bool,
 }
 
 impl Tile {
     pub fn empty() -> Self {
-        Tile{blocked: false, block_sight: false}
+        Tile{blocked: false, block_sight: false, explored: false}
     }
 
     pub fn wall() -> Self {
-        Tile{blocked: true, block_sight: true}
+        Tile{blocked: true, block_sight: true, explored: false}
     }
 }
 
@@ -159,7 +160,7 @@ fn make_map() -> (Map, (i32, i32)) {
     (map, starting_position)
 }
 
-fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &Map, fov_map: &mut FovMap, fov_recompute: bool) {
+fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mut Map, fov_map: &mut FovMap, fov_recompute: bool) {
     if fov_recompute {
         let player = &objects[0];
         fov_map.compute_fov(player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO);
@@ -175,7 +176,13 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &Ma
                     (true, true) => COLOR_LIGHT_WALL,
                     (true, false) => COLOR_LIGHT_GROUND,
                 };
-                con.set_char_background(x, y, color, BackgroundFlag::Set);
+                let explored = &mut map[x as usize][y as usize].explored;
+                if visible {
+                    *explored = true;
+                }
+                if *explored {
+                    con.set_char_background(x, y, color, BackgroundFlag::Set);
+                }
             }
         }
 
@@ -203,6 +210,7 @@ fn handle_keys(root: &mut Root, player: &mut Object, map: &Map) -> bool {
             root.set_fullscreen(!fullscreen);
         }
         Key { code: Escape, .. } => return true,  // exit game
+        Key { code: Char, printable: 'q', .. } => return true,
 
         // movement keys
         Key { code: Up, .. } => player.move_by(0, -1, map),
@@ -256,7 +264,7 @@ fn main() {
     // the list of objects with those two
 
     // generate map (at this point it's not drawn to the screen)
-    let (map, (player_x, player_y)) = make_map();
+    let (mut map, (player_x, player_y)) = make_map();
     let player = Object::new(player_x, player_y, '@', colors::WHITE);
     let mut objects = [player, npc];
 
@@ -275,7 +283,7 @@ fn main() {
     while !root.window_closed() {
         // render the screen
         let fov_recompute = previous_player_position != (objects[0].x, objects[0].y);
-        render_all(&mut root, &mut con, &objects, &map, &mut fov_map, fov_recompute);
+        render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute);
 
         root.flush();
 
