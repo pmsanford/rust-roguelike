@@ -31,7 +31,7 @@ const MAX_ROOMS: i32 = 30;
 
 const MAX_ROOM_MONSTERS: i32 = 3;
 
-
+const PLAYER: usize = 0;
 
 type Map = Vec<Vec<Tile>>;
 
@@ -85,15 +85,21 @@ struct Object {
     y: i32,
     char: char,
     color: Color,
+    name: String,
+    blocks: bool,
+    alive: bool,
 }
 
 impl Object {
-    pub fn new(x: i32, y: i32, char: char, color: Color) -> Self {
+    pub fn new(x: i32, y: i32, char: char, name: &str, color: Color, blocks: bool) -> Self {
         Object {
             x: x,
             y: y,
             char: char,
             color: color,
+            name: name.into(),
+            blocks: blocks,
+            alive: false,
         }
     }
 
@@ -114,6 +120,15 @@ impl Object {
     /// Erase the character that represents this object
     pub fn clear(&self, con: &mut Console) {
         con.put_char(self.x, self.y, ' ', BackgroundFlag::None);
+    }
+
+    pub fn pos(&self) -> (i32, i32) {
+        (self.x, self.y)
+    }
+
+    pub fn set_pos(&mut self, x: i32, y: i32) {
+        self.x = x;
+        self.y = y;
     }
 }
 
@@ -161,6 +176,16 @@ fn make_map(objects: &mut Vec<Object>) -> (Map, (i32, i32)) {
     }
 
     (map, starting_position)
+}
+
+fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
+    if map[x as usize][y as usize].blocked {
+        return true;
+    }
+
+    objects.iter().any(|object| {
+        object.blocks && object.pos() == (x, y)
+    })
 }
 
 fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mut Map, fov_map: &mut FovMap, fov_recompute: bool) {
@@ -257,9 +282,9 @@ fn place_objects(room: &Rect, objects: &mut Vec<Object>) {
         let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
 
         let mut monster = if rand::random::<f32>() < 0.8 {
-            Object::new(x, y, 'o', colors::DESATURATED_GREEN)
+            Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true)
         } else {
-            Object::new(x, y, 'T', colors::DARKER_GREEN)
+            Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true)
         };
 
         objects.push(monster);
@@ -278,7 +303,7 @@ fn main() {
     let mut objects = vec![];
     // generate map (at this point it's not drawn to the screen)
     let (mut map, (player_x, player_y)) = make_map(&mut objects);
-    let player = Object::new(player_x, player_y, '@', colors::WHITE);
+    let player = Object::new(player_x, player_y, '@', "Player", colors::WHITE, true);
     objects.insert(0 as usize, player);
 
     let mut fov_map = FovMap::new(MAP_WIDTH, MAP_HEIGHT);
