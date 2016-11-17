@@ -33,6 +33,13 @@ const MAX_ROOM_MONSTERS: i32 = 3;
 
 const PLAYER: usize = 0;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PlayerAction {
+    TookTurn,
+    DidntTakeTurn,
+    Exit,
+}
+
 type Map = Vec<Vec<Tile>>;
 
 struct Rect {
@@ -225,30 +232,43 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
     }
 }
 
-fn handle_keys(root: &mut Root, objects: &mut [Object], map: &Map) -> bool {
+fn handle_keys(root: &mut Root, objects: &mut [Object], map: &Map) -> PlayerAction {
     use tcod::input::Key;
     use tcod::input::KeyCode::*;
+    use PlayerAction::*;
 
     let key = root.wait_for_keypress(true);
-    match key {
-        Key { code: Enter, alt: true, .. } => {
+    let player_alive = objects[PLAYER].alive;
+    match (key, player_alive) {
+        (Key { code: Enter, alt: true, .. }, _) => {
             // Alt+Enter: toggle fullscreen
             let fullscreen = root.is_fullscreen();
             root.set_fullscreen(!fullscreen);
+            DidntTakeTurn
         }
-        Key { code: Escape, .. } => return true,  // exit game
-        Key { code: Char, printable: 'q', .. } => return true,
+        (Key { code: Escape, .. }, _) => Exit,  // exit game
+        (Key { code: Char, printable: 'q', .. }, _) => Exit,
 
         // movement keys
-        Key { code: Up, .. } => move_by(PLAYER, 0, -1, map, objects),
-        Key { code: Down, .. } => move_by(PLAYER, 0, 1, map, objects),
-        Key { code: Left, .. } => move_by(PLAYER, -1, 0, map, objects),
-        Key { code: Right, .. } => move_by(PLAYER, 1, 0, map, objects),
+        (Key { code: Up, .. }, true) => {
+            player_move_or_attack(0, -1, map, objects);
+            TookTurn
+        },
+        (Key { code: Down, .. }, true) => {
+            player_move_or_attack(0, 1, map, objects);
+            TookTurn
+        },
+        (Key { code: Left, .. }, true) => {
+            player_move_or_attack(-1, 0, map, objects);
+            TookTurn
+        },
+        (Key { code: Right, .. }, true) => {
+            player_move_or_attack(1, 0, map, objects);
+            TookTurn
+        },
 
-        _ => {},
+        _ => DidntTakeTurn,
     }
-
-    false
 }
 
 fn create_room(room: &Rect, map: &mut Map) {
@@ -290,6 +310,24 @@ fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>) {
             monster.alive = true;
 
             objects.push(monster);
+        }
+    }
+}
+
+fn player_move_or_attack(dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
+    let x = objects[PLAYER].x + dx;
+    let y = objects[PLAYER].y + dy;
+
+    let target_id = objects.iter().position(|object| {
+        object.pos() == (x, y)
+    });
+
+    match target_id {
+        Some(target_id) => {
+            println!("The {} laughs at your puny efforts to attack him!", objects[target_id].name);
+        },
+        None => {
+            move_by(PLAYER, dx, dy, map, objects);
         }
     }
 }
@@ -339,9 +377,16 @@ fn main() {
             let player = &objects[PLAYER];
             previous_player_position =  (player.x, player.y);
         }
-        let exit = handle_keys(&mut root, &mut objects, &map);
-        if exit {
+        let player_action = handle_keys(&mut root, &mut objects, &map);
+        if player_action == PlayerAction::Exit {
             break
+        }
+        if objects[PLAYER].alive && player_action != PlayerAction::DidntTakeTurn {
+            for object in &objects {
+                if (object as *const _) != (&objects[PLAYER] as *const _) {
+                    println!("The {} growls!", object.name);
+                }
+            }
         }
     }
 }
