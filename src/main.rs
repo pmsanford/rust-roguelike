@@ -37,6 +37,10 @@ const BAR_WIDTH: i32 = 20;
 const PANEL_HEIGHT: i32 = 7;
 const PANEL_Y: i32 = SCREEN_HEIGHT - PANEL_HEIGHT;
 
+const MSG_X: i32 = BAR_WIDTH + 2;
+const MSG_WIDTH: i32 = SCREEN_WIDTH - BAR_WIDTH - 2;
+const MSG_HEIGHT: usize = PANEL_HEIGHT as usize - 1;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Fighter {
     max_hp: i32,
@@ -91,6 +95,7 @@ enum PlayerAction {
 }
 
 type Map = Vec<Vec<Tile>>;
+type Messages = Vec<(String, Color)>;
 
 struct Rect {
 	x1: i32,
@@ -280,7 +285,7 @@ fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
 }
 
 fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mut Map, 
-    fov_map: &mut FovMap, fov_recompute: bool, panel: &mut Offscreen) {
+    fov_map: &mut FovMap, fov_recompute: bool, panel: &mut Offscreen, messages: &Messages) {
     if fov_recompute {
         let player = &objects[PLAYER];
         fov_map.compute_fov(player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO);
@@ -324,6 +329,16 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
     let hp = objects[PLAYER].fighter.map_or(0, |f| f.hp);
     let max_hp = objects[PLAYER].fighter.map_or(0, |f| f.max_hp);
     render_bar(panel, 1, 1, BAR_WIDTH, "HP", hp, max_hp, colors::LIGHT_RED, colors::DARKER_RED);
+    let mut y = MSG_HEIGHT as i32;
+    for &(ref msg, color) in messages.iter().rev() {
+        let msg_height = panel.get_height_rect(MSG_X, y, MSG_WIDTH, 0, msg);
+        y -= msg_height;
+        if y < 0 {
+            break;
+        }
+        panel.set_default_foreground(color);
+        panel.print_rect(MSG_X, y, MSG_WIDTH, 0, msg);
+    }
     blit(panel, (0, 0), (SCREEN_WIDTH, PANEL_HEIGHT), root, (0, PANEL_Y), 1.0, 1.0);
 }
 
@@ -488,6 +503,13 @@ fn render_bar(panel: &mut Offscreen, x: i32, y: i32, total_width: i32, name: &st
         TextAlignment::Center, &format!("{}: {}/{}", name, value, maximum));
 }
 
+fn message<T: Into<String>>(messages: &mut Messages, message: T, color: Color) {
+    if messages.len() == MSG_HEIGHT {
+        messages.remove(0);
+    }
+    messages.push((message.into(), color));
+}
+
 fn main() {
     let mut root = Root::initializer()
         .font("arial10x10.png", FontLayout::Tcod)
@@ -520,10 +542,13 @@ fn main() {
 
     let mut panel = Offscreen::new(SCREEN_WIDTH, PANEL_HEIGHT);
 
+    let mut messages = vec![];
+
+
     while !root.window_closed() {
         // render the screen
         let fov_recompute = previous_player_position != (objects[PLAYER].x, objects[PLAYER].y);
-        render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute, &mut panel);
+        render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute, &mut panel, &mut messages);
 
         root.flush();
 
