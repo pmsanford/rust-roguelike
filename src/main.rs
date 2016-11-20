@@ -39,6 +39,41 @@ struct Fighter {
     hp: i32,
     defense: i32,
     power: i32,
+    on_death: DeathCallback,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DeathCallback {
+    Player,
+    Monster,
+}
+
+impl DeathCallback {
+    fn callback(self, object: &mut Object) {
+        use DeathCallback::*;
+        let callback: fn (&mut Object) = match self {
+            Player => player_death,
+            Monster => monster_death,
+        };
+        callback(object);
+    }
+}
+
+fn player_death(player: &mut Object) {
+    println!("You died!");
+
+    player.char = '%';
+    player.color = colors::DARK_RED;
+}
+
+fn monster_death(monster: &mut Object) {
+    println!("{} is dead!", monster.name);
+    monster.char = '%';
+    monster.color = colors::DARK_RED;
+    monster.blocks = false;
+    monster.fighter = None;
+    monster.ai = None;
+    monster.name = format!("remains of {}", monster.name);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -157,6 +192,12 @@ impl Object {
                 fighter.hp -= damage;
             }
         }
+        if let Some(fighter) = self.fighter {
+            if fighter.hp <= 0 {
+                self.alive = false;
+                fighter.on_death.callback(self);
+            }
+        }
     }
 
     pub fn attack(&mut self, target: &mut Object) {
@@ -260,8 +301,9 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
             }
         }
 
-        // draw all objects in the list
-        for object in objects {
+        let mut to_draw: Vec<_> = objects.iter().filter(|o| fov_map.is_in_fov(o.x, o.y)).collect();
+        to_draw.sort_by(|o1, o2| { o1.blocks.cmp(&o2.blocks) });
+        for object in &to_draw {
             if fov_map.is_in_fov(object.x, object.y) {
                 object.draw(con);
             }
@@ -347,12 +389,14 @@ fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>) {
         if !is_blocked(x, y, map, objects) {
             let mut monster = if rand::random::<f32>() < 0.8 {
                 let mut orc = Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true);
-                orc.fighter = Some(Fighter { max_hp: 10, hp: 10, defense: 0, power: 3 });
+                orc.fighter = Some(Fighter { max_hp: 10, hp: 10, defense: 0, power: 3, 
+                    on_death: DeathCallback::Monster });
                 orc.ai = Some(Ai);
                 orc
             } else {
                 let mut troll = Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true);
-                troll.fighter = Some(Fighter { max_hp: 16, hp: 16, defense: 1, power: 4 });
+                troll.fighter = Some(Fighter { max_hp: 16, hp: 16, defense: 1, power: 4, 
+                    on_death: DeathCallback::Monster });
                 troll.ai = Some(Ai);
                 troll
             };
@@ -369,7 +413,7 @@ fn player_move_or_attack(dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
     let y = objects[PLAYER].y + dy;
 
     let target_id = objects.iter().position(|object| {
-        object.pos() == (x, y)
+        object.fighter.is_some() && object.pos() == (x, y)
     });
 
     match target_id {
@@ -432,7 +476,8 @@ fn main() {
     let (mut map, (player_x, player_y)) = make_map(&mut objects);
     let mut player = Object::new(player_x, player_y, '@', "Player", colors::WHITE, true);
     player.alive = true;
-    player.fighter = Some(Fighter { max_hp: 30, hp: 30, defense: 2, power: 5 });
+    player.fighter = Some(Fighter { max_hp: 30, hp: 30, defense: 2, power: 5, 
+        on_death: DeathCallback::Player });
     objects.insert(0 as usize, player);
 
     let mut fov_map = FovMap::new(MAP_WIDTH, MAP_HEIGHT);
