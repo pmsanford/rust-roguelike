@@ -12,7 +12,7 @@ const SCREEN_HEIGHT: i32 = 50;
 
 // size of the map
 const MAP_WIDTH: i32 = 80;
-const MAP_HEIGHT: i32 = 45;
+const MAP_HEIGHT: i32 = 43;
 
 const LIMIT_FPS: i32 = 20;  // 20 frames-per-second maximum
 
@@ -32,6 +32,10 @@ const MAX_ROOMS: i32 = 30;
 const MAX_ROOM_MONSTERS: i32 = 3;
 
 const PLAYER: usize = 0;
+
+const BAR_WIDTH: i32 = 20;
+const PANEL_HEIGHT: i32 = 7;
+const PANEL_Y: i32 = SCREEN_HEIGHT - PANEL_HEIGHT;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Fighter {
@@ -275,7 +279,8 @@ fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
     })
 }
 
-fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mut Map, fov_map: &mut FovMap, fov_recompute: bool) {
+fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mut Map, 
+    fov_map: &mut FovMap, fov_recompute: bool, panel: &mut Offscreen) {
     if fov_recompute {
         let player = &objects[PLAYER];
         fov_map.compute_fov(player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO);
@@ -312,10 +317,14 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
 
     // blit the contents of "con" to the root console
     blit(con, (0, 0), (MAP_WIDTH, MAP_HEIGHT), root, (0, 0), 1.0, 1.0);
-    if let Some(fighter) = objects[PLAYER].fighter {
-        root.print_ex(1, SCREEN_HEIGHT - 2, BackgroundFlag::None, 
-            TextAlignment::Left, format!("HP : {}/{} ", fighter.hp, fighter.max_hp));
-    }
+
+    panel.set_default_background(colors::BLACK);
+    panel.clear();
+
+    let hp = objects[PLAYER].fighter.map_or(0, |f| f.hp);
+    let max_hp = objects[PLAYER].fighter.map_or(0, |f| f.max_hp);
+    render_bar(panel, 1, 1, BAR_WIDTH, "HP", hp, max_hp, colors::LIGHT_RED, colors::DARKER_RED);
+    blit(panel, (0, 0), (SCREEN_WIDTH, PANEL_HEIGHT), root, (0, PANEL_Y), 1.0, 1.0);
 }
 
 fn handle_keys(root: &mut Root, objects: &mut [Object], map: &Map) -> PlayerAction {
@@ -462,6 +471,23 @@ fn mut_two<T>(first_index: usize, second_index: usize, items: &mut [T]) -> (&mut
     }
 }
 
+fn render_bar(panel: &mut Offscreen, x: i32, y: i32, total_width: i32, name: &str,
+    value: i32, maximum: i32, bar_color: Color, back_color: Color) {
+    let bar_width = (value as f32 / maximum as f32 * total_width as f32) as i32;
+
+    panel.set_default_background(back_color);
+    panel.rect(x, y, total_width, 1, false, BackgroundFlag::Screen);
+
+    panel.set_default_background(bar_color);
+    if bar_width > 0 {
+        panel.rect(x, y, bar_width, 1, false, BackgroundFlag::Screen);
+    }
+
+    panel.set_default_foreground(colors::WHITE);
+    panel.print_ex(x + total_width / 2, y, BackgroundFlag::None,
+        TextAlignment::Center, &format!("{}: {}/{}", name, value, maximum));
+}
+
 fn main() {
     let mut root = Root::initializer()
         .font("arial10x10.png", FontLayout::Tcod)
@@ -492,10 +518,12 @@ fn main() {
 
     let mut previous_player_position = (-1, 1);
 
+    let mut panel = Offscreen::new(SCREEN_WIDTH, PANEL_HEIGHT);
+
     while !root.window_closed() {
         // render the screen
         let fov_recompute = previous_player_position != (objects[PLAYER].x, objects[PLAYER].y);
-        render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute);
+        render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute, &mut panel);
 
         root.flush();
 
