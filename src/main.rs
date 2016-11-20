@@ -300,21 +300,21 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
                 }
             }
         }
+    }
 
-        let mut to_draw: Vec<_> = objects.iter().filter(|o| fov_map.is_in_fov(o.x, o.y)).collect();
-        to_draw.sort_by(|o1, o2| { o1.blocks.cmp(&o2.blocks) });
-        for object in &to_draw {
-            if fov_map.is_in_fov(object.x, object.y) {
-                object.draw(con);
-            }
+    let mut to_draw: Vec<_> = objects.iter().filter(|o| fov_map.is_in_fov(o.x, o.y)).collect();
+    to_draw.sort_by(|o1, o2| { o1.blocks.cmp(&o2.blocks) });
+    for object in &to_draw {
+        if fov_map.is_in_fov(object.x, object.y) {
+            object.draw(con);
         }
+    }
 
-        // blit the contents of "con" to the root console
-        blit(con, (0, 0), (MAP_WIDTH, MAP_HEIGHT), root, (0, 0), 1.0, 1.0);
-        if let Some(fighter) = objects[PLAYER].fighter {
-            root.print_ex(1, SCREEN_HEIGHT - 2, BackgroundFlag::None, 
-                TextAlignment::Left, format!("HP : {}/{} ", fighter.hp, fighter.max_hp));
-        }
+    // blit the contents of "con" to the root console
+    blit(con, (0, 0), (MAP_WIDTH, MAP_HEIGHT), root, (0, 0), 1.0, 1.0);
+    if let Some(fighter) = objects[PLAYER].fighter {
+        root.print_ex(1, SCREEN_HEIGHT - 2, BackgroundFlag::None, 
+            TextAlignment::Left, format!("HP : {}/{} ", fighter.hp, fighter.max_hp));
     }
 }
 
