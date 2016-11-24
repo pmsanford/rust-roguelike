@@ -44,6 +44,8 @@ const MSG_X: i32 = BAR_WIDTH + 2;
 const MSG_WIDTH: i32 = SCREEN_WIDTH - BAR_WIDTH - 2;
 const MSG_HEIGHT: usize = PANEL_HEIGHT as usize - 1;
 
+const HEAL_AMOUNT: i32 = 4;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Fighter {
     max_hp: i32,
@@ -57,6 +59,11 @@ struct Fighter {
 enum DeathCallback {
     Player,
     Monster,
+}
+
+enum UseResult {
+    UsedUp,
+    Cancelled,
 }
 
 impl DeathCallback {
@@ -226,6 +233,15 @@ impl Object {
             message(messages,
                 format!("{} attacks {} but it has no effect!", self.name, target.name),
                 colors::RED);
+        }
+    }
+
+    pub fn heal(&mut self, amount: i32) {
+        if let Some(ref mut fighter) = self.fighter {
+            fighter.hp += amount;
+            if fighter.hp > fighter.max_hp {
+                fighter.hp = fighter.max_hp;
+            }
         }
     }
 }
@@ -406,10 +422,13 @@ fn handle_keys(key: Key, root: &mut Root, objects: &mut Vec<Object>, map: &Map,
         },
 
         (Key { printable: 'i', .. }, true) => {
-            inventory_menu(
+            let inventory_index = inventory_menu(
                 inventory,
                 "Press the key next to an item to use it, or any other to cancel.\n",
                 root);
+            if let Some(inventory_index) = inventory_index {
+                use_item(inventory_index, inventory, objects, messages);
+            }
             DidntTakeTurn
         },
 
@@ -636,6 +655,43 @@ fn inventory_menu(inventory: &[Object], header: &str, root: &mut Root) -> Option
     } else {
         None
     }
+}
+
+fn use_item(inventory_id: usize, inventory: &mut Vec<Object>, objects: &mut [Object],
+        messages: &mut Messages) {
+    use Item::*;
+
+    if let Some(item) = inventory[inventory_id].item {
+        let on_use = match item {
+            Heal => cast_heal,
+        };
+
+        match on_use(inventory_id, objects, messages) {
+            UseResult::UsedUp => {
+                inventory.remove(inventory_id);
+            },
+            UseResult::Cancelled => {
+                message(messages, "Cancelled", colors::WHITE);
+            }
+        }
+    } else {
+        message(messages, format!("The {} cannot be used.", inventory[inventory_id].name), 
+            colors::WHITE);
+    }
+}
+
+fn cast_heal(_inventory_id: usize, objects: &mut [Object], messages: &mut Messages) -> UseResult {
+    if let Some(fighter) = objects[PLAYER].fighter {
+        if fighter.hp == fighter.max_hp {
+            message(messages, "You are already at full health.", colors::RED);
+            return UseResult::Cancelled;
+        }
+
+        message(messages, "Your wounds start to feel better!", colors::LIGHT_VIOLET);
+        objects[PLAYER].heal(HEAL_AMOUNT);
+        return UseResult::UsedUp;
+    }
+    UseResult::Cancelled
 }
 
 fn main() {
