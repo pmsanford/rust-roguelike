@@ -4,6 +4,7 @@ extern crate rand;
 use tcod::console::*;
 use tcod::colors::{self, Color};
 use tcod::map::{Map as FovMap, FovAlgorithm};
+use tcod::input::{self, Event, Mouse, Key};
 use rand::Rng;
 
 // actual size of the window
@@ -289,7 +290,8 @@ fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
 }
 
 fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mut Map, 
-    fov_map: &mut FovMap, fov_recompute: bool, panel: &mut Offscreen, messages: &Messages) {
+    fov_map: &mut FovMap, fov_recompute: bool, panel: &mut Offscreen, messages: &Messages,
+    mouse: Mouse) {
     if fov_recompute {
         let player = &objects[PLAYER];
         fov_map.compute_fov(player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO);
@@ -333,6 +335,10 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
     let hp = objects[PLAYER].fighter.map_or(0, |f| f.hp);
     let max_hp = objects[PLAYER].fighter.map_or(0, |f| f.max_hp);
     render_bar(panel, 1, 1, BAR_WIDTH, "HP", hp, max_hp, colors::LIGHT_RED, colors::DARKER_RED);
+
+    panel.set_default_foreground(colors::LIGHT_GREY);
+    panel.print_ex(1, 0, BackgroundFlag::None, TextAlignment::Left,
+        get_names_under_mouse(mouse, objects, fov_map));
     let mut y = MSG_HEIGHT as i32;
     for &(ref msg, color) in messages.iter().rev() {
         let msg_height = panel.get_height_rect(MSG_X, y, MSG_WIDTH, 0, msg);
@@ -346,12 +352,11 @@ fn render_all(root: &mut Root, con: &mut Offscreen, objects: &[Object], map: &mu
     blit(panel, (0, 0), (SCREEN_WIDTH, PANEL_HEIGHT), root, (0, PANEL_Y), 1.0, 1.0);
 }
 
-fn handle_keys(root: &mut Root, objects: &mut [Object], map: &Map, messages: &mut Messages) -> PlayerAction {
+fn handle_keys(key: Key, root: &mut Root, objects: &mut [Object], map: &Map, messages: &mut Messages) -> PlayerAction {
     use tcod::input::Key;
     use tcod::input::KeyCode::*;
     use PlayerAction::*;
 
-    let key = root.wait_for_keypress(true);
     let player_alive = objects[PLAYER].alive;
     match (key, player_alive) {
         (Key { code: Enter, alt: true, .. }, _) => {
@@ -514,6 +519,18 @@ fn message<T: Into<String>>(messages: &mut Messages, message: T, color: Color) {
     messages.push((message.into(), color));
 }
 
+fn get_names_under_mouse(mouse: Mouse, objects: &[Object], fov_map: &FovMap) -> String {
+    let (x, y) = (mouse.cx as i32, mouse.cy as i32);
+
+    let names = objects
+                .iter()
+                .filter(|obj| {obj.pos() == (x, y) && fov_map.is_in_fov(obj.x, obj.y)})
+                .map(|obj| obj.name.clone())
+                .collect::<Vec<_>>();
+
+    names.join(", ")
+}
+
 fn main() {
     let mut root = Root::initializer()
         .font("arial10x10.png", FontLayout::Tcod)
@@ -551,11 +568,18 @@ fn main() {
     message(&mut messages, "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.",
         colors::RED);
 
+    let mut mouse = Default::default();
+    let mut key = Default::default();
 
     while !root.window_closed() {
+        match input::check_for_event(input::MOUSE | input::KEY_PRESS) {
+            Some((_, Event::Mouse(m))) => mouse = m,
+            Some((_, Event::Key(k))) => key = k,
+            _ => key = Default::default(),
+        };
         // render the screen
         let fov_recompute = previous_player_position != (objects[PLAYER].x, objects[PLAYER].y);
-        render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute, &mut panel, &mut messages);
+        render_all(&mut root, &mut con, &objects, &mut map, &mut fov_map, fov_recompute, &mut panel, &mut messages, mouse);
 
         root.flush();
 
@@ -569,7 +593,7 @@ fn main() {
             let player = &objects[PLAYER];
             previous_player_position =  (player.x, player.y);
         }
-        let player_action = handle_keys(&mut root, &mut objects, &map, &mut messages);
+        let player_action = handle_keys(key, &mut root, &mut objects, &map, &mut messages);
         if player_action == PlayerAction::Exit {
             break
         }
