@@ -97,8 +97,11 @@ fn monster_death(monster: &mut Object, messages: &mut Messages) {
     monster.name = format!("remains of {}", monster.name);
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Ai;
+#[derive(Debug)]
+enum Ai {
+    Basic,
+    Confused { previous_ai: Box<Ai>, num_turns: i32 },
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum PlayerAction {
@@ -481,13 +484,13 @@ fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>) {
                 let mut orc = Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true);
                 orc.fighter = Some(Fighter { max_hp: 10, hp: 10, defense: 0, power: 3, 
                     on_death: DeathCallback::Monster });
-                orc.ai = Some(Ai);
+                orc.ai = Some(Ai::Basic);
                 orc
             } else {
                 let mut troll = Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true);
                 troll.fighter = Some(Fighter { max_hp: 16, hp: 16, defense: 1, power: 4, 
                     on_death: DeathCallback::Monster });
-                troll.ai = Some(Ai);
+                troll.ai = Some(Ai::Basic);
                 troll
             };
 
