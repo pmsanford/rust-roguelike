@@ -49,6 +49,9 @@ const HEAL_AMOUNT: i32 = 4;
 const LIGHTNING_DAMAGE: i32 = 20;
 const LIGHTNING_RANGE: i32 = 5;
 
+const CONFUSE_RANGE: i32 = 8;
+const CONFUSE_NUM_TURNS: i32 = 10;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Fighter {
     max_hp: i32,
@@ -264,6 +267,7 @@ impl Object {
 enum Item {
     Heal,
     Lightning,
+    Confuse,
 }
 
 fn move_by(id: usize, dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
@@ -512,10 +516,15 @@ fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>) {
                 let mut object = Object::new(x, y, '!', "healing potion", colors::VIOLET, false);
                 object.item = Some(Item::Heal);
                 object
-            } else {
+            } else if dice < 0.7 + 0.15 {
                 let mut object = Object::new(x, y, '#', "scroll of lightning bolt",
                                             colors::DARK_GREEN, false);
                 object.item = Some(Item::Lightning);
+                object
+            } else {
+                let mut object = Object::new(x, y, '#', "scroll of confusion",
+                                                colors::LIGHT_YELLOW, false);
+                object.item = Some(Item::Confuse);
                 object
             };
             objects.push(item);
@@ -553,6 +562,19 @@ fn move_towards(id: usize, target_x: i32, target_y: i32, map: &Map, objects: &mu
 }
 
 fn ai_take_turn(monster_id: usize, map: &Map, objects: &mut [Object], fov_map: &FovMap, messages: &mut Messages) {
+    use Ai::*;
+    if let Some(ai) = objects[monster_id].ai.take() {
+        let new_ai = match ai {
+            Basic => ai_basic(monster_id, map, objects, fov_map, messages),
+            Confused { previous_ai, num_turns } => ai_confused(
+                monster_id, map, objects, messages, previous_ai, num_turns)
+        };
+        objects[monster_id].ai = Some(new_ai);
+    }
+}
+
+fn ai_basic(monster_id: usize, map: &Map, objects: &mut [Object],
+                fov_map: &FovMap, messages: &mut Messages) -> Ai {
     let (monster_x, monster_y) = objects[monster_id].pos();
     if fov_map.is_in_fov(monster_x, monster_y) {
         if objects[monster_id].distance_to(&objects[PLAYER]) >= 2.0 {
@@ -562,6 +584,24 @@ fn ai_take_turn(monster_id: usize, map: &Map, objects: &mut [Object], fov_map: &
             let (monster, player) = mut_two(monster_id, PLAYER, objects);
             monster.attack(player, messages);
         }
+    }
+    Ai::Basic
+}
+
+fn ai_confused(monster_id: usize, map: &Map, objects: &mut [Object], messages: &mut Messages,
+                previous_ai: Box<Ai>, num_turns: i32) -> Ai {
+    if num_turns >= 0 {
+        move_by(monster_id,
+            rand::thread_rng().gen_range(-1, 2),
+            rand::thread_rng().gen_range(-1, 2),
+            map,
+            objects);
+        Ai::Confused { previous_ai: previous_ai, num_turns: num_turns - 1 }
+    } else {
+        message(messages, format!("The {} is no longer confused!",
+            objects[monster_id].name),
+        colors::RED);
+        *previous_ai
     }
 }
 
@@ -687,7 +727,8 @@ fn use_item(inventory_id: usize, inventory: &mut Vec<Object>, objects: &mut [Obj
     if let Some(item) = inventory[inventory_id].item {
         let on_use = match item {
             Heal => cast_heal,
-            LIghtning => cast_lightning,
+            Lightning => cast_lightning,
+            Confuse => cast_confuse,
         };
 
         match on_use(inventory_id, objects, messages, tcod) {
@@ -726,6 +767,26 @@ fn cast_lightning(_inventory_id: usize, objects: &mut [Object], messages: &mut M
                 objects[monster_id].name, LIGHTNING_DAMAGE),
             colors::LIGHT_BLUE);
         objects[monster_id].take_damage(LIGHTNING_DAMAGE, messages);
+        UseResult::UsedUp
+    } else {
+        message(messages, "No enemy is close enough to strike.", colors::RED);
+        UseResult::Cancelled
+    }
+}
+
+fn cast_confuse(_inventory_id: usize, objects: &mut [Object], messages: &mut Messages, tcod: &mut Tcod) -> UseResult {
+    let monster_id = closest_monster(CONFUSE_RANGE, objects, tcod);
+    if let Some(monster_id) = monster_id {
+        let old_ai = objects[monster_id].ai.take().unwrap_or(Ai::Basic);
+
+        objects[monster_id].ai = Some(Ai::Confused {
+            previous_ai: Box::new(old_ai),
+            num_turns: CONFUSE_NUM_TURNS,
+        });
+        message(messages,
+            format!("The eyes of {} look vacant, as he starts to stumble around!",
+                objects[monster_id].name),
+            colors::LIGHT_GREEN);
         UseResult::UsedUp
     } else {
         message(messages, "No enemy is close enough to strike.", colors::RED);
