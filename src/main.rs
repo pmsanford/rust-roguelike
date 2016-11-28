@@ -76,25 +76,25 @@ enum UseResult {
 }
 
 impl DeathCallback {
-    fn callback(self, object: &mut Object, messages: &mut Messages) {
+    fn callback(self, object: &mut Object, game: &mut Game) {
         use DeathCallback::*;
-        let callback: fn (&mut Object, &mut Messages) = match self {
+        let callback: fn (&mut Object, &mut Game) = match self {
             Player => player_death,
             Monster => monster_death,
         };
-        callback(object, messages);
+        callback(object, game);
     }
 }
 
-fn player_death(player: &mut Object, messages: &mut Messages) {
-    message(messages, "You died!", colors::RED);
+fn player_death(player: &mut Object, game: &mut Game) {
+    message(&mut game.log, "You died!", colors::RED);
 
     player.char = '%';
     player.color = colors::DARK_RED;
 }
 
-fn monster_death(monster: &mut Object, messages: &mut Messages) {
-    message(messages, format!("{} is dead!", monster.name), colors::RED);
+fn monster_death(monster: &mut Object, game: &mut Game) {
+    message(&mut game.log, format!("{} is dead!", monster.name), colors::RED);
     monster.char = '%';
     monster.color = colors::DARK_RED;
     monster.blocks = false;
@@ -233,7 +233,7 @@ impl Object {
         ((dx.pow(2) + dy.pow(2)) as f32).sqrt()
     }
 
-    pub fn take_damage(&mut self, damage: i32, messages: &mut Messages) {
+    pub fn take_damage(&mut self, damage: i32, game: &mut Game) {
         if let Some(fighter) = self.fighter.as_mut() {
             if damage > 0 {
                 fighter.hp -= damage;
@@ -242,21 +242,21 @@ impl Object {
         if let Some(fighter) = self.fighter {
             if fighter.hp <= 0 {
                 self.alive = false;
-                fighter.on_death.callback(self, messages);
+                fighter.on_death.callback(self, game);
             }
         }
     }
 
-    pub fn attack(&mut self, target: &mut Object, messages: &mut Messages) {
+    pub fn attack(&mut self, target: &mut Object, game: &mut Game) {
         let damage = self.fighter.map_or(0, |f| f.power) - target.fighter.map_or(0, |f| f.defense);
 
         if damage > 0 {
-            message(messages,
+            message(&mut game.log,
                 format!("{} attacks {} for {} hit points.", self.name, target.name, damage),
                 colors::RED);
-            target.take_damage(damage, messages);
+            target.take_damage(damage, game);
         } else {
-            message(messages,
+            message(&mut game.log,
                 format!("{} attacks {} but it has no effect!", self.name, target.name),
                 colors::RED);
         }
@@ -447,7 +447,7 @@ fn handle_keys(key: Key, tcod: &mut Tcod, objects: &mut Vec<Object>,
                 object.pos() == objects[PLAYER].pos() && object.item.is_some()
             });
             if let Some(item_id) = item_id {
-                pick_item_up(item_id, objects, &mut game.inventory, &mut game.log);
+                pick_item_up(item_id, objects, game);
             }
             TookTurn
         },
@@ -467,7 +467,7 @@ fn handle_keys(key: Key, tcod: &mut Tcod, objects: &mut Vec<Object>,
                 "Press the key next to an item to drop it, or any other to cancel.\n",
                 &mut tcod.root);
             if let Some(inventory_index) = inventory_index {
-                drop_item(inventory_index, &mut game.inventory, objects, &mut game.log);
+                drop_item(inventory_index, objects, game);
             }
             TookTurn
         }
@@ -570,7 +570,7 @@ fn player_move_or_attack(dx: i32, dy: i32, objects: &mut [Object], game: &mut Ga
     match target_id {
         Some(target_id) => {
             let (player, target) = mut_two(PLAYER, target_id, objects);
-            player.attack(target, &mut game.log);
+            player.attack(target, game);
         },
         None => {
             move_by(PLAYER, dx, dy, &mut game.map, objects);
@@ -609,7 +609,7 @@ fn ai_basic(monster_id: usize, objects: &mut [Object],
             move_towards(monster_id, player_x, player_y, &mut game.map, objects);
         } else if objects[PLAYER].fighter.map_or(false, |f| f.hp > 0) {
             let (monster, player) = mut_two(monster_id, PLAYER, objects);
-            monster.attack(player, &mut game.log);
+            monster.attack(player, game);
         }
     }
     Ai::Basic
@@ -680,16 +680,15 @@ fn get_names_under_mouse(mouse: Mouse, objects: &[Object], fov_map: &FovMap) -> 
     names.join(", ")
 }
 
-fn pick_item_up(object_id: usize, objects: &mut Vec<Object>, inventory: &mut Vec<Object>, 
-        messages: &mut Messages) {
-    if inventory.len() >= 26 {
-        message(messages, format!("Your inventory is full, cannot pick up {}.", objects[object_id].name),
+fn pick_item_up(object_id: usize, objects: &mut Vec<Object>, game: &mut Game) {
+    if game.inventory.len() >= 26 {
+        message(&mut game.log, format!("Your inventory is full, cannot pick up {}.", objects[object_id].name),
             colors::RED);
     } else {
         let item = objects.swap_remove(object_id);
-        message(messages, format!("You picked up a {}!", item.name),
+        message(&mut game.log, format!("You picked up a {}!", item.name),
             colors::GREEN);
-        inventory.push(item);
+        game.inventory.push(item);
     }
 }
 
@@ -796,7 +795,7 @@ fn cast_lightning(_inventory_id: usize, objects: &mut [Object], game: &mut Game,
             format!("A lightning bolt strikes the {} with a loud thunder! The damage is {} hit points.",
                 objects[monster_id].name, LIGHTNING_DAMAGE),
             colors::LIGHT_BLUE);
-        objects[monster_id].take_damage(LIGHTNING_DAMAGE, &mut game.log);
+        objects[monster_id].take_damage(LIGHTNING_DAMAGE, game);
         UseResult::UsedUp
     } else {
         message(&mut game.log, "No enemy is close enough to strike.", colors::RED);
@@ -844,7 +843,7 @@ fn cast_fireball(_inventory_id: usize, objects: &mut [Object], game: &mut Game,
             message(&mut game.log,
                 format!("The {} gets burned for {} hit poitns.", obj.name, FIREBALL_DAMAGE),
                 colors::ORANGE);
-            obj.take_damage(FIREBALL_DAMAGE, &mut game.log);
+            obj.take_damage(FIREBALL_DAMAGE, game);
         }
     }
 
@@ -913,11 +912,11 @@ fn target_monster(tcod: &mut Tcod, objects: &[Object], game: &mut Game,
     }
 }
 
-fn drop_item(inventory_id: usize, inventory: &mut Vec<Object>, objects: &mut Vec<Object>,
-        messages: &mut Messages) {
-    let mut item = inventory.remove(inventory_id);
+fn drop_item(inventory_id: usize, objects: &mut Vec<Object>,
+        game: &mut Game) {
+    let mut item = game.inventory.remove(inventory_id);
     item.set_pos(objects[PLAYER].x, objects[PLAYER].y);
-    message(messages, format!("You dropped a {}.", item.name), colors::YELLOW);
+    message(&mut game.log, format!("You dropped a {}.", item.name), colors::YELLOW);
     objects.push(item);
 }
 
