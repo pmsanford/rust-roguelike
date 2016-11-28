@@ -457,6 +457,15 @@ fn handle_keys(key: Key, tcod: &mut Tcod, map: &mut Map, objects: &mut Vec<Objec
             }
             DidntTakeTurn
         },
+        (Key { printable: 'd', .. }, true) => {
+            let inventory_index = inventory_menu(inventory, 
+                "Press the key next to an item to drop it, or any other to cancel.\n",
+                &mut tcod.root);
+            if let Some(inventory_index) = inventory_index {
+                drop_item(inventory_index, inventory, objects, messages);
+            }
+            TookTurn
+        }
 
         _ => DidntTakeTurn,
     }
@@ -897,6 +906,14 @@ fn target_monster(tcod: &mut Tcod, objects: &[Object], map: &mut Map, messages: 
             None => return None,
         }
     }
+}
+
+fn drop_item(inventory_id: usize, inventory: &mut Vec<Object>, objects: &mut Vec<Object>,
+        messages: &mut Messages) {
+    let mut item = inventory.remove(inventory_id);
+    item.set_pos(objects[PLAYER].x, objects[PLAYER].y);
+    message(messages, format!("You dropped a {}.", item.name), colors::YELLOW);
+    objects.push(item);
 }
 
 fn main() {
