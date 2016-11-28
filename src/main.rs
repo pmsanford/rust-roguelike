@@ -75,6 +75,16 @@ enum UseResult {
     Cancelled,
 }
 
+trait MessageLog {
+    fn add<T: Into<String>>(&mut self, message: T, color: Color);
+}
+
+impl MessageLog for Vec<(String, Color)> {
+    fn add<T: Into<String>>(&mut self, message: T, color: Color) {
+        self.push((message.into(), color));
+    }
+}
+
 impl DeathCallback {
     fn callback(self, object: &mut Object, game: &mut Game) {
         use DeathCallback::*;
@@ -87,14 +97,14 @@ impl DeathCallback {
 }
 
 fn player_death(player: &mut Object, game: &mut Game) {
-    message(&mut game.log, "You died!", colors::RED);
+    game.log.add("You died!", colors::RED);
 
     player.char = '%';
     player.color = colors::DARK_RED;
 }
 
 fn monster_death(monster: &mut Object, game: &mut Game) {
-    message(&mut game.log, format!("{} is dead!", monster.name), colors::RED);
+    game.log.add(format!("{} is dead!", monster.name), colors::RED);
     monster.char = '%';
     monster.color = colors::DARK_RED;
     monster.blocks = false;
@@ -251,12 +261,12 @@ impl Object {
         let damage = self.fighter.map_or(0, |f| f.power) - target.fighter.map_or(0, |f| f.defense);
 
         if damage > 0 {
-            message(&mut game.log,
+            game.log.add(
                 format!("{} attacks {} for {} hit points.", self.name, target.name, damage),
                 colors::RED);
             target.take_damage(damage, game);
         } else {
-            message(&mut game.log,
+            game.log.add(
                 format!("{} attacks {} but it has no effect!", self.name, target.name),
                 colors::RED);
         }
@@ -625,7 +635,7 @@ fn ai_confused(monster_id: usize, objects: &mut [Object], game: &mut Game,
             objects);
         Ai::Confused { previous_ai: previous_ai, num_turns: num_turns - 1 }
     } else {
-        message(&mut game.log, format!("The {} is no longer confused!",
+        game.log.add(format!("The {} is no longer confused!",
             objects[monster_id].name),
         colors::RED);
         *previous_ai
@@ -661,13 +671,6 @@ fn render_bar(panel: &mut Offscreen, x: i32, y: i32, total_width: i32, name: &st
         TextAlignment::Center, &format!("{}: {}/{}", name, value, maximum));
 }
 
-fn message<T: Into<String>>(messages: &mut Messages, message: T, color: Color) {
-    if messages.len() == MSG_HEIGHT {
-        messages.remove(0);
-    }
-    messages.push((message.into(), color));
-}
-
 fn get_names_under_mouse(mouse: Mouse, objects: &[Object], fov_map: &FovMap) -> String {
     let (x, y) = (mouse.cx as i32, mouse.cy as i32);
 
@@ -682,11 +685,11 @@ fn get_names_under_mouse(mouse: Mouse, objects: &[Object], fov_map: &FovMap) -> 
 
 fn pick_item_up(object_id: usize, objects: &mut Vec<Object>, game: &mut Game) {
     if game.inventory.len() >= 26 {
-        message(&mut game.log, format!("Your inventory is full, cannot pick up {}.", objects[object_id].name),
+        game.log.add(format!("Your inventory is full, cannot pick up {}.", objects[object_id].name),
             colors::RED);
     } else {
         let item = objects.swap_remove(object_id);
-        message(&mut game.log, format!("You picked up a {}!", item.name),
+        game.log.add(format!("You picked up a {}!", item.name),
             colors::GREEN);
         game.inventory.push(item);
     }
@@ -763,11 +766,11 @@ fn use_item(inventory_id: usize, objects: &mut [Object],
                 game.inventory.remove(inventory_id);
             },
             UseResult::Cancelled => {
-                message(&mut game.log, "Cancelled", colors::WHITE);
+                game.log.add("Cancelled", colors::WHITE);
             }
         }
     } else {
-        message(&mut game.log, format!("The {} cannot be used.", game.inventory[inventory_id].name), 
+        game.log.add(format!("The {} cannot be used.", game.inventory[inventory_id].name), 
             colors::WHITE);
     }
 }
@@ -776,11 +779,11 @@ fn cast_heal(_inventory_id: usize, objects: &mut [Object], game: &mut Game,
         tcod: &mut Tcod) -> UseResult {
     if let Some(fighter) = objects[PLAYER].fighter {
         if fighter.hp == fighter.max_hp {
-            message(&mut game.log, "You are already at full health.", colors::RED);
+            game.log.add("You are already at full health.", colors::RED);
             return UseResult::Cancelled;
         }
 
-        message(&mut game.log, "Your wounds start to feel better!", colors::LIGHT_VIOLET);
+        game.log.add("Your wounds start to feel better!", colors::LIGHT_VIOLET);
         objects[PLAYER].heal(HEAL_AMOUNT);
         return UseResult::UsedUp;
     }
@@ -791,21 +794,21 @@ fn cast_lightning(_inventory_id: usize, objects: &mut [Object], game: &mut Game,
         tcod: &mut Tcod) -> UseResult {
     let monster_id = closest_monster(LIGHTNING_RANGE, objects, tcod);
     if let Some(monster_id) = monster_id {
-        message(&mut game.log,
+        game.log.add(
             format!("A lightning bolt strikes the {} with a loud thunder! The damage is {} hit points.",
                 objects[monster_id].name, LIGHTNING_DAMAGE),
             colors::LIGHT_BLUE);
         objects[monster_id].take_damage(LIGHTNING_DAMAGE, game);
         UseResult::UsedUp
     } else {
-        message(&mut game.log, "No enemy is close enough to strike.", colors::RED);
+        game.log.add("No enemy is close enough to strike.", colors::RED);
         UseResult::Cancelled
     }
 }
 
 fn cast_confuse(_inventory_id: usize, objects: &mut [Object], game: &mut Game,
         tcod: &mut Tcod) -> UseResult {
-    message(&mut game.log, "Left-click an enemy to confuse it, or right-click to cancel.",
+    game.log.add("Left-click an enemy to confuse it, or right-click to cancel.",
         colors::LIGHT_CYAN);
     let monster_id = target_monster(tcod, objects, game, Some(CONFUSE_RANGE as f32));
     if let Some(monster_id) = monster_id {
@@ -815,32 +818,32 @@ fn cast_confuse(_inventory_id: usize, objects: &mut [Object], game: &mut Game,
             previous_ai: Box::new(old_ai),
             num_turns: CONFUSE_NUM_TURNS,
         });
-        message(&mut game.log,
+        game.log.add(
             format!("The eyes of {} look vacant, as he starts to stumble around!",
                 objects[monster_id].name),
             colors::LIGHT_GREEN);
         UseResult::UsedUp
     } else {
-        message(&mut game.log, "No enemy is close enough to strike.", colors::RED);
+        game.log.add("No enemy is close enough to strike.", colors::RED);
         UseResult::Cancelled
     }
 }
 
 fn cast_fireball(_inventory_id: usize, objects: &mut [Object], game: &mut Game,
         tcod: &mut Tcod) -> UseResult {
-    message(&mut game.log, "Left-click a target tile for the fireball, or right-click to cancel.",
+    game.log.add("Left-click a target tile for the fireball, or right-click to cancel.",
         colors::LIGHT_CYAN);
     let (x, y) = match target_tile(tcod, objects, game, None) {
         Some(tile_pos) => tile_pos,
         None => return UseResult::Cancelled,
     };
 
-    message(&mut game.log, format!("The fireball explodes, burning everything within {} tiles!",
+    game.log.add(format!("The fireball explodes, burning everything within {} tiles!",
         FIREBALL_RADIUS), colors::ORANGE);
 
     for obj in objects {
         if obj.distance(x, y) <= FIREBALL_RADIUS as f32 && obj.fighter.is_some() {
-            message(&mut game.log,
+            game.log.add(
                 format!("The {} gets burned for {} hit poitns.", obj.name, FIREBALL_DAMAGE),
                 colors::ORANGE);
             obj.take_damage(FIREBALL_DAMAGE, game);
@@ -916,7 +919,7 @@ fn drop_item(inventory_id: usize, objects: &mut Vec<Object>,
         game: &mut Game) {
     let mut item = game.inventory.remove(inventory_id);
     item.set_pos(objects[PLAYER].x, objects[PLAYER].y);
-    message(&mut game.log, format!("You dropped a {}.", item.name), colors::YELLOW);
+    game.log.add(format!("You dropped a {}.", item.name), colors::YELLOW);
     objects.push(item);
 }
 
@@ -959,7 +962,7 @@ fn main() {
 
     let mut previous_player_position = (-1, 1);
 
-    message(&mut game.log, "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.",
+    game.log.add("Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.",
         colors::RED);
 
     let mut key = Default::default();
