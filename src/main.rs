@@ -154,6 +154,7 @@ struct Game {
     map: Map,
     log: Messages,
     inventory: Vec<Object>,
+    dungeon_level: u32,
 }
 
 impl Rect {
@@ -205,6 +206,7 @@ struct Object {
     fighter: Option<Fighter>,
     ai: Option<Ai>,
     item: Option<Item>,
+    always_visible: bool,
 }
 
 impl Object {
@@ -220,6 +222,7 @@ impl Object {
             fighter: None,
             ai: None,
             item: None,
+            always_visible: false,
         }
     }
 
@@ -315,6 +318,9 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
 
     let mut starting_position = (0, 0);
 
+    assert_eq!(&objects[PLAYER] as *const _, &objects[0] as *const _);
+    objects.truncate(1);
+
     for _ in 0 .. MAX_ROOMS {
         let w = rand::thread_rng().gen_range(ROOM_MIN_SIZE, ROOM_MAX_SIZE + 1);
         let h = rand::thread_rng().gen_range(ROOM_MIN_SIZE, ROOM_MAX_SIZE + 1);
@@ -351,7 +357,8 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
     }
 
     let (last_room_x, last_room_y) = rooms[rooms.len() - 1].center();
-    let stairs = Object::new(last_room_x, last_room_y, '>', "stairs", colors::WHITE, false);
+    let mut stairs = Object::new(last_room_x, last_room_y, '>', "stairs", colors::WHITE, false);
+    stairs.always_visible = true;
     objects.push(stairs);
     objects[PLAYER].set_pos(starting_position.0, starting_position.1);
 
@@ -395,12 +402,10 @@ fn render_all(tcod: &mut Tcod, objects: &[Object], game: &mut Game, fov_recomput
         }
     }
 
-    let mut to_draw: Vec<_> = objects.iter().filter(|o| tcod.fov.is_in_fov(o.x, o.y)).collect();
+    let mut to_draw: Vec<_> = objects.iter().filter(|o| { tcod.fov.is_in_fov(o.x, o.y) || (o.always_visible && game.map[o.x as usize][o.y as usize].explored) }).collect();
     to_draw.sort_by(|o1, o2| { o1.blocks.cmp(&o2.blocks) });
     for object in &to_draw {
-        if tcod.fov.is_in_fov(object.x, object.y) {
-            object.draw(&mut tcod.con);
-        }
+        object.draw(&mut tcod.con);
     }
 
     // blit the contents of "con" to the root console
@@ -412,6 +417,7 @@ fn render_all(tcod: &mut Tcod, objects: &[Object], game: &mut Game, fov_recomput
     let hp = objects[PLAYER].fighter.map_or(0, |f| f.hp);
     let max_hp = objects[PLAYER].fighter.map_or(0, |f| f.max_hp);
     render_bar(&mut tcod.panel, 1, 1, BAR_WIDTH, "HP", hp, max_hp, colors::LIGHT_RED, colors::DARKER_RED);
+    tcod.panel.print_ex(1, 3, BackgroundFlag::None, TextAlignment::Left, format!("Dungeon level: {}", game.dungeon_level));
 
     tcod.panel.set_default_foreground(colors::LIGHT_GREY);
     tcod.panel.print_ex(1, 0, BackgroundFlag::None, TextAlignment::Left,
@@ -513,6 +519,7 @@ fn next_level(tcod: &mut Tcod, objects: &mut Vec<Object>, game: &mut Game) {
 
     game.log.add("After a rare moment of peace, you descend deeper into the heart of the dungeon...",
         colors::RED);
+    game.dungeon_level += 1;
     let newmap = make_map(objects);
     game.map = newmap;
     initialize_fov(&game.map, tcod);
@@ -578,21 +585,25 @@ fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>) {
             let dice = rand::random::<f32>();
             let item = if dice < 0.7 {
                 let mut object = Object::new(x, y, '!', "healing potion", colors::VIOLET, false);
+                object.always_visible = true;
                 object.item = Some(Item::Heal);
                 object
             } else if dice < 0.7 + 0.1 {
                 let mut object = Object::new(x, y, '#', "scroll of lightning bolt",
                                             colors::DARK_GREEN, false);
+                object.always_visible = true;
                 object.item = Some(Item::Lightning);
                 object
             } else if dice < 0.7 + 0.1 + 0.1 {
                 let mut object = Object::new(x, y, '#', "scroll of fireball", colors::LIGHT_YELLOW,
                     false);
+                object.always_visible = true;
                 object.item = Some(Item::Fireball);
                 object
             } else {
                 let mut object = Object::new(x, y, '#', "scroll of confusion",
                                                 colors::LIGHT_YELLOW, false);
+                object.always_visible = true;
                 object.item = Some(Item::Confuse);
                 object
             };
@@ -976,6 +987,7 @@ fn new_game(tcod: &mut Tcod) -> (Vec<Object>, Game) {
         map: map,
         log: vec![],
         inventory: vec![],
+        dungeon_level: 1,
     };
 
     initialize_fov(&game.map, tcod);
