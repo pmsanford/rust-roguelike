@@ -468,21 +468,40 @@ fn handle_keys(key: Key, tcod: &mut Tcod, objects: &mut Vec<Object>,
         (Key { code: Char, printable: 'q', .. }, _) => Exit,
 
         // movement keys
-        (Key { code: Up, .. }, true) => {
+        (Key { code: Up, .. }, true) | (Key { code: NumPad8, .. }, true) => {
             player_move_or_attack(0, -1, objects, game);
             TookTurn
         },
-        (Key { code: Down, .. }, true) => {
+        (Key { code: Down, .. }, true) | (Key { code: NumPad2, .. }, true) => {
             player_move_or_attack(0, 1, objects, game);
             TookTurn
         },
-        (Key { code: Left, .. }, true) => {
+        (Key { code: Left, .. }, true) | (Key { code: NumPad4, .. }, true) => {
             player_move_or_attack(-1, 0, objects, game);
             TookTurn
         },
-        (Key { code: Right, .. }, true) => {
+        (Key { code: Right, .. }, true) | (Key { code: NumPad6, .. }, true) => {
             player_move_or_attack(1, 0, objects, game);
             TookTurn
+        },
+        (Key { code: Home, .. }, true) | (Key { code: NumPad7, ..}, true) => {
+            player_move_or_attack(-1, -1, objects, game);
+            TookTurn
+        },
+        (Key { code: PageUp, .. }, true) | (Key { code: NumPad9, ..}, true) => {
+            player_move_or_attack(1, -1, objects, game);
+            TookTurn
+        },
+        (Key { code: End, .. }, true) | (Key { code: NumPad1, ..}, true) => {
+            player_move_or_attack(-1, 1, objects, game);
+            TookTurn
+        },
+        (Key { code: PageDown, .. }, true) | (Key { code: NumPad3, ..}, true) => {
+            player_move_or_attack(1, 1, objects, game);
+            TookTurn
+        },
+        (Key { code: NumPad5, .. }, true) => {
+            TookTurn  // do nothing, i.e. wait for the monster to come to you
         },
         (Key { printable: 'g', .. }, true) => {
             let item_id = objects.iter().position(|object| {
