@@ -60,7 +60,7 @@ const CONFUSE_NUM_TURNS: i32 = 10;
 const FIREBALL_RADIUS: i32 = 3;
 const FIREBALL_DAMAGE: i32 = 12;
 
-#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable)]
+#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable, RustcDecodable)]
 struct Fighter {
     max_hp: i32,
     hp: i32,
@@ -69,7 +69,7 @@ struct Fighter {
     on_death: DeathCallback,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable)]
+#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable, RustcDecodable)]
 enum DeathCallback {
     Player,
     Monster,
@@ -118,7 +118,7 @@ fn monster_death(monster: &mut Object, game: &mut Game) {
     monster.name = format!("remains of {}", monster.name);
 }
 
-#[derive(Debug, RustcEncodable)]
+#[derive(Debug, RustcEncodable, RustcDecodable)]
 enum Ai {
     Basic,
     Confused { previous_ai: Box<Ai>, num_turns: i32 },
@@ -149,7 +149,7 @@ struct Tcod {
     mouse: Mouse,
 }
 
-#[derive(RustcEncodable)]
+#[derive(RustcEncodable, RustcDecodable)]
 struct Game {
     map: Map,
     log: Messages,
@@ -174,7 +174,7 @@ impl Rect {
 }
 
 /// A tile of the map and its properties
-#[derive(Clone, Copy, Debug, RustcEncodable)]
+#[derive(Clone, Copy, Debug, RustcEncodable, RustcDecodable)]
 struct Tile {
     blocked: bool,
     block_sight: bool,
@@ -193,7 +193,7 @@ impl Tile {
 
 /// This is a generic object: the player, a monster, an item, the stairs...
 /// It's always represented by a character on screen.
-#[derive(Debug, RustcEncodable)]
+#[derive(Debug, RustcEncodable, RustcDecodable)]
 struct Object {
     x: i32,
     y: i32,
@@ -292,7 +292,7 @@ impl Object {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable)]
+#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable, RustcDecodable)]
 enum Item {
     Heal,
     Lightning,
@@ -1010,6 +1010,14 @@ fn play_game(objects: &mut Vec<Object>, game: &mut Game, tcod: &mut Tcod) {
     }
 }
 
+fn load_game() -> Result<(Vec<Object>, Game), Box<Error>> {
+    let mut json_save_state = String::new();
+    let mut file = try!{ File::open("savegame") };
+    try!{ file.read_to_string(&mut json_save_state) };
+    let result = try!{ json::decode::<(Vec<Object>, Game)>(&json_save_state) };
+    Ok(result)
+}
+
 fn main_menu(tcod: &mut Tcod) {
     let img = tcod::image::Image::from_file("menu_background.png")
         .ok().expect("Background image not found.");
@@ -1031,6 +1039,11 @@ fn main_menu(tcod: &mut Tcod) {
                     let (mut objects, mut game) = new_game(tcod);
                     play_game(&mut objects, &mut game, tcod);
                 },
+                Some(1) => {
+                    let (mut objects, mut game) = load_game().unwrap();
+                    initialize_fov(&game.map, tcod);
+                    play_game(&mut objects, &mut game, tcod);
+                }
                 Some(2) => {
                     break;
                 },
