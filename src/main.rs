@@ -425,7 +425,6 @@ fn handle_keys(key: Key, tcod: &mut Tcod, objects: &mut Vec<Object>,
     use PlayerAction::*;
 
     let player_alive = objects[PLAYER].alive;
-    print!("Key: {}\n", key.printable);
     match (key, player_alive) {
         (Key { code: Enter, alt: true, .. }, _) => {
             // Alt+Enter: toggle fullscreen
@@ -700,7 +699,11 @@ fn menu<T: AsRef<str>>(header: &str, options: &[T], width: i32, root: &mut Root)
     use std::ascii::AsciiExt;
     assert!(options.len() <= 26, "Cannot have a menu with more than 26 options.");
 
-    let header_height = root.get_height_rect(0, 0, width, SCREEN_HEIGHT, header);
+    let header_height = if header.is_empty() {
+        0
+    } else {
+        root.get_height_rect(0, 0, width, SCREEN_HEIGHT, header)
+    };
     let height = options.len() as i32 + header_height;
 
     let mut window = Offscreen::new(width, height);
@@ -958,6 +961,7 @@ fn initialize_fov(map: &Map, tcod: &mut Tcod) {
                 !map[x as usize][y as usize].blocked);
         }
     }
+    tcod.con.clear();
 }
 
 fn play_game(objects: &mut Vec<Object>, game: &mut Game, tcod: &mut Tcod) {
@@ -999,6 +1003,35 @@ fn play_game(objects: &mut Vec<Object>, game: &mut Game, tcod: &mut Tcod) {
     }
 }
 
+fn main_menu(tcod: &mut Tcod) {
+    let img = tcod::image::Image::from_file("menu_background.png")
+        .ok().expect("Background image not found.");
+
+        while !tcod.root.window_closed() {
+            tcod::image::blit_2x(&img, (0, 0), (-1, -1), 
+                &mut tcod.root, (0, 0));
+
+            let choices = &["Play a new game", "Continue last game", "Quit"];
+            tcod.root.set_default_foreground(colors::LIGHT_YELLOW);
+            tcod.root.print_ex(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 4, BackgroundFlag::None,
+                TextAlignment::Center, "TOMBS OF THE ANCIENT KINGS");
+            tcod.root.print_ex(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 2, BackgroundFlag::None,
+                TextAlignment::Center, "By Paul Sanford");
+            let choice = menu("", choices, 24, &mut tcod.root);
+
+            match choice {
+                Some(0) => {
+                    let (mut objects, mut game) = new_game(tcod);
+                    play_game(&mut objects, &mut game, tcod);
+                },
+                Some(2) => {
+                    break;
+                },
+                _ => {}
+            }
+        }
+}
+
 fn main() {
     let root = Root::initializer()
         .font("arial10x10.png", FontLayout::Tcod)
@@ -1015,6 +1048,5 @@ fn main() {
         mouse: Default::default(),
     };
 
-    let (mut objects, mut game) = new_game(&mut tcod);
-    play_game(&mut objects, &mut game, &mut tcod);
+    main_menu(&mut tcod);
 }
