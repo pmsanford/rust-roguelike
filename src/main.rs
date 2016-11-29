@@ -350,6 +350,10 @@ fn make_map(objects: &mut Vec<Object>) -> (Map, (i32, i32)) {
         }
     }
 
+    let (last_room_x, last_room_y) = rooms[rooms.len() - 1].center();
+    let stairs = Object::new(last_room_x, last_room_y, '>', "stairs", colors::WHITE, false);
+    objects.push(stairs);
+
     (map, starting_position)
 }
 
@@ -486,10 +490,32 @@ fn handle_keys(key: Key, tcod: &mut Tcod, objects: &mut Vec<Object>,
                 drop_item(inventory_index, objects, game);
             }
             TookTurn
+        },
+        (Key { printable: '>', .. }, true) => {
+            let player_on_stairs = objects.iter().any(|object| {
+                object.pos() == objects[PLAYER].pos() && object.name == "stairs"
+            });
+            if player_on_stairs {
+                next_level(tcod, objects, game);
+            }
+            DidntTakeTurn
         }
 
         _ => DidntTakeTurn,
     }
+}
+
+fn next_level(tcod: &mut Tcod, objects: &mut Vec<Object>, game: &mut Game) {
+    game.log.add("You take a moment to rest, and recover your strength.", colors::VIOLET);
+    let heal_hp = objects[PLAYER].fighter.map_or(0, |f| f.max_hp / 2);
+    objects[PLAYER].heal(heal_hp);
+
+    game.log.add("After a rare moment of peace, you descend deeper into the heart of the dungeon...",
+        colors::RED);
+    let (newmap, (px, py)) = make_map(objects);
+    game.map = newmap;
+    objects[PLAYER].set_pos(px, py);
+    initialize_fov(&game.map, tcod);
 }
 
 fn create_room(room: &Rect, map: &mut Map) {
