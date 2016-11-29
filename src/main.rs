@@ -1,11 +1,16 @@
 extern crate tcod;
 extern crate rand;
+extern crate rustc_serialize;
 
 use tcod::console::*;
 use tcod::colors::{self, Color};
 use tcod::map::{Map as FovMap, FovAlgorithm};
 use tcod::input::{self, Event, Mouse, Key};
 use rand::Rng;
+use std::io::{Read, Write};
+use std::fs::File;
+use std::error::Error;
+use rustc_serialize::json;
 
 // actual size of the window
 const SCREEN_WIDTH: i32 = 80;
@@ -55,7 +60,7 @@ const CONFUSE_NUM_TURNS: i32 = 10;
 const FIREBALL_RADIUS: i32 = 3;
 const FIREBALL_DAMAGE: i32 = 12;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable)]
 struct Fighter {
     max_hp: i32,
     hp: i32,
@@ -64,7 +69,7 @@ struct Fighter {
     on_death: DeathCallback,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable)]
 enum DeathCallback {
     Player,
     Monster,
@@ -113,7 +118,7 @@ fn monster_death(monster: &mut Object, game: &mut Game) {
     monster.name = format!("remains of {}", monster.name);
 }
 
-#[derive(Debug)]
+#[derive(Debug, RustcEncodable)]
 enum Ai {
     Basic,
     Confused { previous_ai: Box<Ai>, num_turns: i32 },
@@ -144,6 +149,7 @@ struct Tcod {
     mouse: Mouse,
 }
 
+#[derive(RustcEncodable)]
 struct Game {
     map: Map,
     log: Messages,
@@ -168,7 +174,7 @@ impl Rect {
 }
 
 /// A tile of the map and its properties
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, RustcEncodable)]
 struct Tile {
     blocked: bool,
     block_sight: bool,
@@ -187,7 +193,7 @@ impl Tile {
 
 /// This is a generic object: the player, a monster, an item, the stairs...
 /// It's always represented by a character on screen.
-#[derive(Debug)]
+#[derive(Debug, RustcEncodable)]
 struct Object {
     x: i32,
     y: i32,
@@ -286,7 +292,7 @@ impl Object {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, RustcEncodable)]
 enum Item {
     Heal,
     Lightning,
@@ -1030,6 +1036,13 @@ fn main_menu(tcod: &mut Tcod) {
                 _ => {}
             }
         }
+}
+
+fn save_game(objects: &[Object], game: &Game) -> Result<(), Box<Error>> {
+    let save_data = try! { json::encode(&(objects, game)) };
+    let mut file = try! { File::create("savegame") };
+    try! { file.write_all(save_data.as_bytes()) };
+    Ok(())
 }
 
 fn main() {

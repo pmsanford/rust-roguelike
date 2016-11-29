@@ -4,5 +4,6 @@ version = "0.1.0"
 authors = ["Paul Sanford <me@paulsanford.net>"]
 
 [dependencies]
-tcod = "0.10"
+tcod = { version = "0.10", features = ["rustc-serialize"] }
 rand = "0.3.9"
+rustc-serialize = "0.3"
