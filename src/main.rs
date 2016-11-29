@@ -307,7 +307,7 @@ fn move_by(id: usize, dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
     }
 }
 
-fn make_map(objects: &mut Vec<Object>) -> (Map, (i32, i32)) {
+fn make_map(objects: &mut Vec<Object>) -> Map {
     // fill map with "unblocked" tiles
     let mut map = vec![vec![Tile::wall(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
 
@@ -353,8 +353,9 @@ fn make_map(objects: &mut Vec<Object>) -> (Map, (i32, i32)) {
     let (last_room_x, last_room_y) = rooms[rooms.len() - 1].center();
     let stairs = Object::new(last_room_x, last_room_y, '>', "stairs", colors::WHITE, false);
     objects.push(stairs);
+    objects[PLAYER].set_pos(starting_position.0, starting_position.1);
 
-    (map, starting_position)
+    map
 }
 
 fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
@@ -512,9 +513,8 @@ fn next_level(tcod: &mut Tcod, objects: &mut Vec<Object>, game: &mut Game) {
 
     game.log.add("After a rare moment of peace, you descend deeper into the heart of the dungeon...",
         colors::RED);
-    let (newmap, (px, py)) = make_map(objects);
+    let newmap = make_map(objects);
     game.map = newmap;
-    objects[PLAYER].set_pos(px, py);
     initialize_fov(&game.map, tcod);
 }
 
@@ -963,14 +963,14 @@ fn new_game(tcod: &mut Tcod) -> (Vec<Object>, Game) {
 
     let mut objects = vec![];
 
-    let (map, (player_x, player_y)) = make_map(&mut objects);
-
-    let mut player = Object::new(player_x, player_y, '@', "player", colors::WHITE, true);
+    let mut player = Object::new(0, 0, '@', "player", colors::WHITE, true);
     player.alive = true;
     player.fighter = Some(
         Fighter { max_hp: 30, hp: 30, defense: 2, 
             power: 5, on_death: DeathCallback::Player });
     objects.insert(0 as usize, player);
+
+    let map = make_map(&mut objects);
 
     let mut game = Game {
         map: map,
