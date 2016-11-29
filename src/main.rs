@@ -600,25 +600,37 @@ fn create_v_tunnel(y1: i32, y2: i32, x: i32, map: &mut Map) {
 }
 
 fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>) {
+    use rand::distributions::{Weighted, WeightedChoice, IndependentSample};
+
     let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTERS + 1);
 
     for _ in 0 .. num_monsters {
         let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
         let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
 
+        let monster_chances = &mut [
+            Weighted { weight: 80, item: "orc" },
+            Weighted { weight: 20, item: "troll" },
+        ];
+        let monster_choice = WeightedChoice::new(monster_chances);
+
         if !is_blocked(x, y, map, objects) {
-            let mut monster = if rand::random::<f32>() < 0.8 {
-                let mut orc = Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true);
-                orc.fighter = Some(Fighter { max_hp: 10, hp: 10, defense: 0, power: 3, 
-                    on_death: DeathCallback::Monster, xp: 35 });
-                orc.ai = Some(Ai::Basic);
-                orc
-            } else {
-                let mut troll = Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true);
-                troll.fighter = Some(Fighter { max_hp: 16, hp: 16, defense: 1, power: 4, 
-                    on_death: DeathCallback::Monster, xp: 100 });
-                troll.ai = Some(Ai::Basic);
-                troll
+            let mut monster = match monster_choice.ind_sample(&mut rand::thread_rng()) {
+                "orc" => {
+                    let mut orc = Object::new(x, y, 'o', "orc", colors::DESATURATED_GREEN, true);
+                    orc.fighter = Some(Fighter { max_hp: 10, hp: 10, defense: 0, power: 3, 
+                        on_death: DeathCallback::Monster, xp: 35 });
+                    orc.ai = Some(Ai::Basic);
+                    orc
+                },
+            "troll" => {
+                    let mut troll = Object::new(x, y, 'T', "troll", colors::DARKER_GREEN, true);
+                    troll.fighter = Some(Fighter { max_hp: 16, hp: 16, defense: 1, power: 4, 
+                        on_death: DeathCallback::Monster, xp: 100 });
+                    troll.ai = Some(Ai::Basic);
+                    troll
+                },
+                _ => unreachable!(),
             };
 
             monster.alive = true;
