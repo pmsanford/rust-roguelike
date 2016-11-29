@@ -996,6 +996,7 @@ fn play_game(objects: &mut Vec<Object>, game: &mut Game, tcod: &mut Tcod) {
         let player_action = handle_keys(key, tcod, objects, game);
 
         if player_action == PlayerAction::Exit {
+            save_game(objects, game);
             break;
         }
 
