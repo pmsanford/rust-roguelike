@@ -183,6 +183,16 @@ enum Slot {
     Head,
 }
 
+impl std::fmt::Display for Slot {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            Slot::LeftHand => write!(f, "left hand"),
+            Slot::RightHand => write!(f, "right hand"),
+            Slot::Head => write!(f, "head")
+        }
+    }
+}
+
 impl Rect {
 	pub fn new(x: i32, y: i32, w: i32, h: i32) -> Self {
 		Rect { x1: x, y1: y, x2: x + w, y2: y + h }
@@ -337,7 +347,7 @@ impl Object {
         if let Some(ref mut equipment) = self.equipment {
             if !equipment.equipped {
                 equipment.equipped = true;
-                log.add(format!("Equippe {} on {:?}", self.name, equipment.slot),
+                log.add(format!("Equippe {} on {}", self.name, equipment.slot),
                     colors::LIGHT_GREEN);
             }
         } else {
@@ -355,7 +365,7 @@ impl Object {
         if let Some(ref mut equipment) = self.equipment {
             if equipment.equipped {
                 equipment.equipped = false;
-                log.add(format!("Dequipped {} from {:?}.", self.name, equipment.slot),
+                log.add(format!("Dequipped {} from {}.", self.name, equipment.slot),
                     colors::LIGHT_YELLOW);
             }
         } else {
@@ -892,7 +902,15 @@ fn pick_item_up(object_id: usize, objects: &mut Vec<Object>, game: &mut Game) {
         let item = objects.swap_remove(object_id);
         game.log.add(format!("You picked up a {}!", item.name),
             colors::GREEN);
+        let index = game.inventory.len();
+        let slot = item.equipment.map(|e| e.slot);
         game.inventory.push(item);
+
+        if let Some(slot) = slot {
+            if get_equipped_in_slot(slot, &game.inventory).is_none() {
+                game.inventory[index].equip(&mut game.log);
+            }
+        }
     }
 }
 
@@ -942,7 +960,14 @@ fn inventory_menu(inventory: &[Object], header: &str, root: &mut Root) -> Option
     let options = if inventory.len() == 0 {
         vec!["Inventory is empty.".into()]
     } else {
-        inventory.iter().map(|item| { item.name.clone() }).collect()
+        inventory.iter().map(|item| { 
+            match item.equipment {
+                Some(equipment) if equipment.equipped => {
+                    format!("{} (on {})", item.name, equipment.slot)
+                },
+                _ => item.name.clone()
+            } 
+        }).collect()
     };
 
     let invenotry_index = menu(header, &options, INVENTORY_WIDTH, root);
@@ -988,6 +1013,9 @@ fn toggle_equipment(_inventory_id: usize, objects: &mut [Object],
         Some(equipment) => equipment,
         None => return UseResult::Cancelled,
     };
+    if let Some(old_equipment) = get_equipped_in_slot(equipment.slot, &game.inventory) {
+        game.inventory[old_equipment].dequip(&mut game.log);
+    }
     if equipment.equipped {
         game.inventory[_inventory_id].dequip(&mut game.log);
     } else {
@@ -1148,6 +1176,9 @@ fn target_monster(tcod: &mut Tcod, objects: &[Object], game: &mut Game,
 fn drop_item(inventory_id: usize, objects: &mut Vec<Object>,
         game: &mut Game) {
     let mut item = game.inventory.remove(inventory_id);
+    if item.equipment.is_some() {
+        item.dequip(&mut game.log);
+    }
     item.set_pos(objects[PLAYER].x, objects[PLAYER].y);
     game.log.add(format!("You dropped a {}.", item.name), colors::YELLOW);
     objects.push(item);
@@ -1337,6 +1368,15 @@ fn from_dungeon_level(table: &[Transition], level: u32) -> u32 {
         .rev()
         .find(|transition| level >= transition.level)
         .map_or(0, |transition| transition.value)
+}
+
+fn get_equipped_in_slot(slot: Slot, inventory: &[Object]) -> Option<usize> {
+    for (inventory_id, item) in inventory.iter().enumerate() {
+        if item.equipment.as_ref().map_or(false, |e| e.equipped && e.slot == slot) {
+            return Some(inventory_id)
+        }
+    }
+    None
 }
 
 fn main() {
