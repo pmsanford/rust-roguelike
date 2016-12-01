@@ -329,10 +329,11 @@ impl Object {
     }
 
     pub fn heal(&mut self, amount: i32, game: &Game) {
+        let max_hp = self.max_hp(game);
         if let Some(ref mut fighter) = self.fighter {
             fighter.hp += amount;
-            if fighter.hp > self.max_hp(game) {
-                fighter.hp = self.max_hp(game);
+            if fighter.hp > max_hp {
+                fighter.hp = max_hp;
             }
         }
     }
@@ -417,7 +418,8 @@ enum Item {
     Lightning,
     Confuse,
     Fireball,
-    Equipment,
+    Sword,
+    Shield,
 }
 
 fn move_by(id: usize, dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
@@ -766,7 +768,10 @@ fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>, level: u32) 
                   item: Item::Fireball},
         Weighted {weight: from_dungeon_level(&[Transition{level: 2, value: 10}], level),
                   item: Item::Confuse},
-        Weighted { weight: 1000, item: Item::Equipment },
+        Weighted {weight: from_dungeon_level(&[Transition{level: 4, value: 5}], level),  
+                  item: Item::Sword},
+        Weighted {weight: from_dungeon_level(&[Transition{level: 8, value: 15}], level),  
+                  item: Item::Shield},
     ];
 
     let item_choice = WeightedChoice::new(item_chances);
@@ -804,12 +809,20 @@ fn place_objects(room: &Rect, map: &Map, objects: &mut Vec<Object>, level: u32) 
                     object.item = Some(Item::Confuse);
                     object
                 },
-                Item::Equipment => {
+                Item::Sword => {
                     let mut object = Object::new(x, y, '/', "sword", colors::SKY, false);
-                    object.item = Some(Item::Equipment);
-                    object.equipment = Some(Equipment { equipped: false, slot: Slot::RightHand, power_bonus: 0, defense_bonus: 0, max_hp_bonus: 0 });
+                    object.item = Some(Item::Sword);
+                    object.equipment = Some(Equipment { equipped: false, slot: Slot::RightHand, power_bonus: 3, defense_bonus: 0, max_hp_bonus: 0 });
                     object
                 },
+                Item::Shield => {
+                    let mut object = Object::new(x, y, '[', "shield", colors::DARKER_ORANGE,
+                        false);
+                    object.item = Some(Item::Shield);
+                    object.equipment = Some(Equipment { equipped: false, slot: Slot::LeftHand,
+                        max_hp_bonus: 0, defense_bonus: 1, power_bonus: 0 });
+                    object
+                }
             };
             objects.push(item);
         }
@@ -1025,7 +1038,8 @@ fn use_item(inventory_id: usize, objects: &mut [Object],
             Lightning => cast_lightning,
             Confuse => cast_confuse,
             Fireball => cast_fireball,
-            Equipment => toggle_equipment,
+            Sword => toggle_equipment,
+            Shield => toggle_equipment,
         };
 
         match on_use(inventory_id, objects, game, tcod) {
@@ -1228,7 +1242,7 @@ fn new_game(tcod: &mut Tcod) -> (Vec<Object>, Game) {
     player.alive = true;
     player.fighter = Some(
         Fighter { base_max_hp: 100, hp: 100, base_defense: 1, 
-            base_power: 4, on_death: DeathCallback::Player, xp: 0 });
+            base_power: 2, on_death: DeathCallback::Player, xp: 0 });
     objects.insert(0 as usize, player);
 
     let map = make_map(&mut objects, 1);
@@ -1239,6 +1253,17 @@ fn new_game(tcod: &mut Tcod) -> (Vec<Object>, Game) {
         inventory: vec![],
         dungeon_level: 1,
     };
+
+    let mut dagger = Object::new(0, 0, '-', "dagger", colors::SKY, false);
+    dagger.item = Some(Item::Sword);
+    dagger.equipment = Some(Equipment {
+        equipped: true,
+        slot: Slot::LeftHand,
+        max_hp_bonus: 0,
+        defense_bonus: 0,
+        power_bonus: 2
+    });
+    game.inventory.push(dagger);
 
     initialize_fov(&game.map, tcod);
 
